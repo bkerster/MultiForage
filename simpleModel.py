@@ -155,9 +155,11 @@ def filter_vals(x, y, world, values, typ):
 ## methods to parse location values
 ## methods to generate next location        
 class Agent:
-    def __init__(self, name=None):
+    def __init__(self, gamma, beta, name=None):
         self.visited = [] # will be made up of tuples (x, y, value)
-        self.xyvals = np.array() # the list of x, y, and estimated values
+        self.xyvals = None # the list of x, y, and estimated values
+        self.gamma = gamma
+        self.beta = beta
         self.prev_loc = None
         self.name = 1 if name is None else name
     
@@ -167,7 +169,7 @@ class Agent:
         '''Calculates the value at each unvisited location
             Takes a DataFrame of unvisited locations and a numpy array of visited locations'''
         v = np.array(self.visited)
-        x = np.apply_along_axis(self.get_value, 1, unvisited, args=(visited,)
+        x = np.apply_along_axis(self.get_value, 1, unvisited, self.visited )
         
         self.xyvals = unvisited.copy()
         self.xyvals[:,2] = x
@@ -193,14 +195,14 @@ class Agent:
         val = np.sum(visited[:,2] / (distance.cdist( visited[:,0:2], [[self.curr_loc[0], self.curr_loc[1]]] )[:,0]) )
         return val   
         
-    def calc_prob_distance(self, gam, beta):
+    def calc_prob_distance(self):
         '''Returns the probability distribution
             Takes a DataFrame containing the world state, gamma, beta, and the newly visited location'''
         if self.prev_loc is None:
-            return np.exp( gam * self.xyvals[:,2] )
+            return np.exp( self.gamma * self.xyvals[:,2] )
         distances = np.apply_along_axis(get_distance_on_row, 1, self.xyvals, args=(self.prev_loc,) )
 
-        vals = gam * (self.xyvals + 1.0) / (beta * distances + 1.0)
+        vals = self.gammma * (self.xyvals + 1.0) / (self.beta * distances + 1.0)
         self.xyvals[:,2] = np.exp(vals)
         return self.xyvals[:,2]
         
@@ -209,7 +211,7 @@ class Agent:
         x, y, val = xyvals[index, :]
         
         points = world[x,y]
-        self.visited.append( (x, y, self.filter_vals(x,y, points, val) )
+        self.visited.append( (x, y, self.filter_vals(x,y, points, val) ) )
         self.prev_loc = (x, y)
         
         return index, x, y, val, points
@@ -247,8 +249,7 @@ def main(density, clustering, map_num, gamma, beta):
     output = [] #used to produce an output to visualized later
     
     #data = {'x':[], 'y':[], 'val':[]}
-    data = np.zeros(world.shape[0]*world.shape[1], 3)
-    data_lookup_table = np.zeros( (world.shape
+    data = np.zeros( (world.shape[0]*world.shape[1], 3) )
     count = 0
     for i in range(world.shape[0]):
         for j in range(world.shape[1]):
@@ -259,38 +260,19 @@ def main(density, clustering, map_num, gamma, beta):
     #df = DataFrame(data)
     
     found_resource = False
-    agent = Agent()
+    agent = Agent(gamma, beta)
     for i in range(300):
         vals = agent.calc_map_values(data)
-        vals = agent.calc_prob_distance(gamma, beta)
+        vals = agent.calc_prob_distance()
         index, x, y, val, points = agent.select_location(world)
         output.append( (x, y, val, points, agent.name) )
         data = np.delete(data, index, 0)
     
     
     
-    
-    ####### OLD STUFF #####
-        v = np.array(visited)
-        df2 = calc_map_values(df.copy(), v) #df2 becomes agent.xyvals
-        
-        if i == 0:
-            df['val'] = calc_prob_distance(df2.copy(), gamma, beta, None)
-        else:
-            df['val'] = calc_prob_distance(df2.copy(), gamma, beta, (visited[-1][0], visited[-1][1]))
-        
-        index = weighted_choice(df['val'])
-        
-        x = df.ix[index]['x']
-        y = df.ix[index]['y']
-
-        visited.append( (x, y, filter_vals(x,y, world, df2, type_spec)) )
-        output.append( (x, y, df2[ (df2['x'] == x) & (df2['y'] == y) ]['val'].iloc[0], world[x,y]) )
-        #output: x, y, val, world_val
-        df = df.drop(index)
 
         
-    clust = np.array(visited)
+    clust = np.array(agent.visited)
 
     if not os.path.exists(out_dir):
         os.mkdir(out_dir)
@@ -323,17 +305,24 @@ def callback_func(params):
 # This example is set up to run across all resource conditions and a variety of a gamma and beta values
 # editing the lists will modify what the model does.
 if __name__ == '__main__':
-    pool = Pool(processes=5)
-    densitys = [100, 600, 1100]
-    clusterings = [1, 3, 5]
-    gammas = [4.5, 5.0, 5.5, 6.0, 6.5]
-    betas = [0.075, 0.1, 0.125, 0.15, 0.175]
-    for density in densitys:
-        for clustering in clusterings:
-            for gamma in gammas:
-                for beta in betas:
-                    for map_num in range(20):
-                        pool.apply_async(main, [density, clustering, map_num, gamma, beta], callback=callback_func)
-    pool.close()
-    pool.join()
-    print 'done'
+    density = 600
+    clustering = 3
+    map_num = 101
+    gamma = 5.5
+    beta = 0.125
+    main(density, clustering, map_num, gamma, beta)
+    
+    # pool = Pool(processes=5)
+    # densitys = [100, 600, 1100]
+    # clusterings = [1, 3, 5]
+    # gammas = [4.5, 5.0, 5.5, 6.0, 6.5]
+    # betas = [0.075, 0.1, 0.125, 0.15, 0.175]
+    # for density in densitys:
+        # for clustering in clusterings:
+            # for gamma in gammas:
+                # for beta in betas:
+                    # for map_num in range(20):
+                        # pool.apply_async(main, [density, clustering, map_num, gamma, beta], callback=callback_func)
+    # pool.close()
+    # pool.join()
+    # print 'done'
