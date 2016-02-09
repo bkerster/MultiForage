@@ -1,7 +1,7 @@
 from __future__ import division
 import numpy as np
 import pandas as pd
-from numba import jit
+#from numba import jit
 from pandas import Series, DataFrame
 from scipy.spatial import distance
 import matplotlib.pyplot as plt
@@ -66,7 +66,7 @@ def tuple_file_name_parser(file_name):
     bg = re.search('(wbg|nobg)', file_name).groups()[0]
     return (res, clust, map_num)
 
-@jit('f8(f8,f8,f8,f8)')
+#@jit('f8(f8,f8,f8,f8)')
 def dist( x1,y1,x2,y2 ):
     '''returns the distance between two points'''
     return np.sqrt((x2-x1)**2 + (y2-y1)**2)
@@ -107,18 +107,20 @@ def calc_map_values(unvisited_df, visited):
     unvisited_df['val'] = x
     return unvisited_df
         
-def weighted_choice(weights):
+def weighted_choice2(weights):
     '''Picks a location based on the weighted probalities'''
     totals = np.cumsum(weights)
-    norm = totals.iloc[-1]
+    norm = totals[-1] #cum sum is total size
     r = np.random.rand()
     throw = r*norm
-    ind = np.searchsorted(np.array(totals), throw)
+    ind = np.searchsorted(totals, throw)
     return weights.index[ind]
+    
+    
 
 def get_distance_on_row(row, prev_loc):
     '''Helper function to calculate distances on a DataFrame'''
-    return dist(row[0], row[0], prev_loc[0], prev_loc[1])
+    return dist(row[0], row[1], prev_loc[0], prev_loc[1])
     
 def calc_prob_distance(df, gam, beta, prev_loc):
     '''Returns the probability distribution
@@ -169,21 +171,21 @@ class Agent:
         '''Calculates the value at each unvisited location
             Takes a DataFrame of unvisited locations and a numpy array of visited locations'''
         v = np.array(self.visited)
-        x = np.apply_along_axis(self.get_value, 1, unvisited, self.visited )
+        x = np.apply_along_axis(self.get_value, 1, unvisited, v )
         
         self.xyvals = unvisited.copy()
         self.xyvals[:,2] = x
         return self.xyvals
     
-    def get_value_small(self):
+    def get_value_small(self, curr_loc, visited):
         '''Returns the value for a given location. 
             This function is used only when very few locations have been explored'''
         val = 0
-        for loc in self.visited:
+        for loc in visited:
             val += loc[2] / dist(curr_loc[0], curr_loc[1], loc[0], loc[1]) 
         return val
     
-    def get_value(self, visited):
+    def get_value(self, unvisited_loc, visited):
         # both curr_loc need to become local variables, visited needs to be an array
         '''Calculates the value for a given location given all other visited locations'''
         #take distance between curr_loc and all visited points
@@ -191,8 +193,8 @@ class Agent:
         #multiply each dist by its value
         #sum
         if visited.ndim < 2 or len(visited) < 2:
-            return self.get_value_small(curr_loc, visited)
-        val = np.sum(visited[:,2] / (distance.cdist( visited[:,0:2], [[self.curr_loc[0], self.curr_loc[1]]] )[:,0]) )
+            return self.get_value_small(unvisited_loc, visited)
+        val = np.sum(visited[:,2] / (distance.cdist( visited[:,0:2], [[unvisited_loc[0], unvisited_loc[1]]] )[:,0]) )
         return val   
         
     def calc_prob_distance(self):
@@ -200,15 +202,19 @@ class Agent:
             Takes a DataFrame containing the world state, gamma, beta, and the newly visited location'''
         if self.prev_loc is None:
             return np.exp( self.gamma * self.xyvals[:,2] )
-        distances = np.apply_along_axis(get_distance_on_row, 1, self.xyvals, args=(self.prev_loc,) )
+        distances = np.apply_along_axis(self.get_distance_to_point, 1, self.xyvals )
 
-        vals = self.gammma * (self.xyvals + 1.0) / (self.beta * distances + 1.0)
+        vals = self.gamma * (self.xyvals[:,2] + 1.0) / (self.beta * distances + 1.0)
         self.xyvals[:,2] = np.exp(vals)
         return self.xyvals[:,2]
         
+    def get_distance_to_point(self, point):
+        '''Helper function to calculate distances'''
+        return dist(point[0], point[1], self.prev_loc[0], self.prev_loc[1])
+        
     def select_location(self, world):
-        index = self.weighted_choice(self.xyvals[:,3].copy())
-        x, y, val = xyvals[index, :]
+        index = self.weighted_choice(self.xyvals[:,2].copy())
+        x, y, val = self.xyvals[index, :]
         
         points = world[x,y]
         self.visited.append( (x, y, self.filter_vals(x,y, points, val) ) )
@@ -218,12 +224,13 @@ class Agent:
     
     def weighted_choice(self, weights):
         '''Picks a location based on the weighted probalities'''
-        totals = np.cumsum(weights)
-        norm = totals.iloc[-1]
-        r = np.random.rand()
-        throw = r*norm
-        ind = np.searchsorted(np.array(totals), throw)
-        return weights.index[ind]
+        # totals = np.cumsum(weights)
+        # norm = totals[-1]
+        # r = np.random.rand()
+        # throw = r*norm
+        # ind = np.searchsorted(np.array(totals), throw)
+        # return weights.index[ind]
+        return np.random.choice(len(weights), p=(weights/weights.sum()) )
         
     def filter_vals(self, x, y, points, val):
         '''Ensures that the log is not taken of 0'''
