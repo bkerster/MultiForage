@@ -1,7 +1,7 @@
 from __future__ import division
 import numpy as np
 import pandas as pd
-#from numba import jit
+from numba import jit
 from pandas import Series, DataFrame
 from scipy.spatial import distance
 import matplotlib.pyplot as plt
@@ -66,7 +66,7 @@ def tuple_file_name_parser(file_name):
     bg = re.search('(wbg|nobg)', file_name).groups()[0]
     return (res, clust, map_num)
 
-#@jit('f8(f8,f8,f8,f8)')
+@jit('f8(f8,f8,f8,f8)')
 def dist( x1,y1,x2,y2 ):
     '''returns the distance between two points'''
     return np.sqrt((x2-x1)**2 + (y2-y1)**2)
@@ -157,23 +157,24 @@ def filter_vals(x, y, world, values, typ):
 ## methods to parse location values
 ## methods to generate next location        
 class Agent:
-    def __init__(self, gamma, beta, name=None):
+    def __init__(self, gamma, beta, prob_values, name=None):
         self.visited = [] # will be made up of tuples (x, y, value)
+        self.prob_values = prob_values #this needs to have a location removed each time anything is visited
         self.xyvals = None # the list of x, y, and estimated values
         self.gamma = gamma
         self.beta = beta
         self.prev_loc = None
         self.name = 1 if name is None else name
     
-    def calc_map_values(self, unvisited):  
+    def calc_map_values(self):  
         #this was a hacky place to use a dataframe, Just use an array instead
         #make sure unvisited is a copy and not a reference
         '''Calculates the value at each unvisited location
             Takes a DataFrame of unvisited locations and a numpy array of visited locations'''
         v = np.array(self.visited)
-        x = np.apply_along_axis(self.get_value, 1, unvisited, v )
+        x = np.apply_along_axis(self.get_value, 1, self.prob_values, v )
         
-        self.xyvals = unvisited.copy()
+        self.xyvals = self.prob_values.copy()
         self.xyvals[:,2] = x
         return self.xyvals
     
@@ -201,36 +202,36 @@ class Agent:
         '''Returns the probability distribution
             Takes a DataFrame containing the world state, gamma, beta, and the newly visited location'''
         if self.prev_loc is None:
-            return np.exp( self.gamma * self.xyvals[:,2] )
+            self.prob_values[:,2] = np.exp( self.gamma * self.xyvals[:,2] )
+            return self.prob_values[:,2]
         distances = np.apply_along_axis(self.get_distance_to_point, 1, self.xyvals )
 
         vals = self.gamma * (self.xyvals[:,2] + 1.0) / (self.beta * distances + 1.0)
-        self.xyvals[:,2] = np.exp(vals)
-        return self.xyvals[:,2]
+        self.prob_values[:,2] = np.exp(vals)
+        return self.prob_values[:,2]
         
     def get_distance_to_point(self, point):
         '''Helper function to calculate distances'''
         return dist(point[0], point[1], self.prev_loc[0], self.prev_loc[1])
         
     def select_location(self, world):
-        index = self.weighted_choice(self.xyvals[:,2].copy())
+        index = self.weighted_choice(self.prob_values[:,2].copy())
         x, y, val = self.xyvals[index, :]
-        
         points = world[x,y]
         self.visited.append( (x, y, self.filter_vals(x,y, points, val) ) )
         self.prev_loc = (x, y)
-        
         return index, x, y, val, points
     
     def weighted_choice(self, weights):
         '''Picks a location based on the weighted probalities'''
-        # totals = np.cumsum(weights)
-        # norm = totals[-1]
-        # r = np.random.rand()
-        # throw = r*norm
-        # ind = np.searchsorted(np.array(totals), throw)
-        # return weights.index[ind]
-        return np.random.choice(len(weights), p=(weights/weights.sum()) )
+        weights = pd.Series(weights)
+        totals = np.cumsum(weights)
+        norm = totals.iloc[-1]
+        r = np.random.rand()
+        throw = r*norm
+        ind = np.searchsorted(np.array(totals), throw)
+        return weights.index[ind]
+        #return np.random.choice(len(weights), p=(weights/weights.sum()) )
         
     def filter_vals(self, x, y, points, val):
         '''Ensures that the log is not taken of 0'''
@@ -240,15 +241,16 @@ class Agent:
             return -1 * np.log(val)
         else:
             return points
+            
+    def remove_index(self, index):
+        self.prob_values = np.delete(self.prob_values, index, 0)
+        return
 
-
-
-    
 
 def main(density, clustering, map_num, gamma, beta):
     '''This function will perform one run of the model with the given parameters and write the results to disk
         Note: the out_dir variable hard codes the folder that the results will be output to'''
-    out_dir = 'param_search' #modify this to change the output location of the model
+    out_dir = 'agent_test' #modify this to change the output location of the model
     type_spec = 'ln'
     world = map_reader(map_name_maker(density, clustering, map_num))
     visited = [] #should be made up of tuples (x,y,value)
@@ -267,18 +269,14 @@ def main(density, clustering, map_num, gamma, beta):
     #df = DataFrame(data)
     
     found_resource = False
-    agent = Agent(gamma, beta)
+    agent = Agent(gamma, beta, data)
     for i in range(300):
-        vals = agent.calc_map_values(data)
-        vals = agent.calc_prob_distance()
+        vals = agent.calc_map_values() #calculates xyvals
+        vals = agent.calc_prob_distance() #calculates prob_values
         index, x, y, val, points = agent.select_location(world)
         output.append( (x, y, val, points, agent.name) )
-        data = np.delete(data, index, 0)
-    
-    
-    
+        agent.remove_index(index)    
 
-        
     clust = np.array(agent.visited)
 
     if not os.path.exists(out_dir):
