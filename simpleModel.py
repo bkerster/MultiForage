@@ -78,14 +78,15 @@ def dist( x1,y1,x2,y2 ):
 ## methods to parse location values
 ## methods to generate next location        
 class Agent:
-    def __init__(self, gamma, beta, prob_values, name=None):
-        self.visited = [] # will be made up of tuples (x, y, value)
+    def __init__(self, gamma, beta, prob_values, attraction_value=None, name=None):
+        self.visited = [] # will be made up of tuples (x, y, value, name)
         self.prob_values = prob_values #this needs to have a location removed each time anything is visited
         self.xyvals = None # the list of x, y, and estimated values
         self.gamma = gamma
         self.beta = beta
         self.prev_loc = None
         self.name = 1 if name is None else name
+        self.attraction_value = attraction_value #how much value the agent places on locations visited by other agents. Can be + or -
     
     def calc_map_values(self):  
         #this was a hacky place to use a dataframe, Just use an array instead
@@ -139,9 +140,11 @@ class Agent:
         index = self.weighted_choice(self.prob_values[:,2].copy())
         x, y, val = self.xyvals[index, :]
         points = world[x,y]
-        self.visited.append( (x, y, self.filter_vals(x,y, points, val) ) )
+        self.visited.append( (x, y, self.filter_vals(x,y, points, val), self.name ) )
         self.prev_loc = (x, y)
         return index, x, y, val, points
+        
+    def add
     
     def weighted_choice(self, weights):
         '''Picks a location based on the weighted probalities'''
@@ -174,8 +177,6 @@ def main(density, clustering, map_num, gamma, beta):
     out_dir = 'agent_test' #modify this to change the output location of the model
     type_spec = 'ln'
     world = map_reader(map_name_maker(density, clustering, map_num))
-    visited = [] #should be made up of tuples (x,y,value)
-    visited2 = [] #should be made up of tuples (x,y,value)
     output = [] #used to produce an output to visualized later
     
     #data = {'x':[], 'y':[], 'val':[]}
@@ -189,14 +190,23 @@ def main(density, clustering, map_num, gamma, beta):
             count += 1
     #df = DataFrame(data)
     
-    found_resource = False
-    agent = Agent(gamma, beta, data)
-    for i in range(300):
-        vals = agent.calc_map_values() #calculates xyvals
-        vals = agent.calc_prob_distance() #calculates prob_values
-        index, x, y, val, points = agent.select_location(world)
-        output.append( (x, y, val, points, agent.name) )
-        agent.remove_index(index)    
+    agents = []
+    agents.append( Agent(gamma, beta, data, 1, 1) ) # gamma, beta, data, attraction_value, name
+    agents.append( Agent(gamma, beta, data, 1, 2) )
+    for i in range(150):
+        for agent in agents:
+            #calculate, and then visit a location
+            vals = agent.calc_map_values() #calculates xyvals
+            vals = agent.calc_prob_distance() #calculates prob_values
+            index, x, y, val, points = agent.select_location(world)
+            output.append( (x, y, val, points, agent.name) )
+            agent.remove_index(index)    
+            
+            #communicate with other agents
+            for other_agent in agents:
+                if other_agent.name != agent.name:
+                    other_agent.
+                    
 
     clust = np.array(agent.visited)
 
