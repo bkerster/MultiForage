@@ -144,7 +144,13 @@ class Agent:
         self.prev_loc = (x, y)
         return index, x, y, val, points
         
-    def add
+    def add_visited_location(self, loc, index, source_name):
+        '''Adds a location to visited and removes it as a possible target.
+            Used to keep track of locations visited by other agents'''
+        self.visited.append( (loc[0], loc[1], self.attraction_value, source_name) )
+        self.remove_index(index)
+        return
+        
     
     def weighted_choice(self, weights):
         '''Picks a location based on the weighted probalities'''
@@ -205,7 +211,7 @@ def main(density, clustering, map_num, gamma, beta):
             #communicate with other agents
             for other_agent in agents:
                 if other_agent.name != agent.name:
-                    other_agent.
+                    other_agent.add_visited_location( (x,y), index, agent.name )
                     
 
     clust = np.array(agent.visited)
