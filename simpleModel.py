@@ -180,7 +180,7 @@ class Agent:
 def main(density, clustering, map_num, gamma, beta):
     '''This function will perform one run of the model with the given parameters and write the results to disk
         Note: the out_dir variable hard codes the folder that the results will be output to'''
-    out_dir = 'agent_test' #modify this to change the output location of the model
+    out_dir = 'multi_test' #modify this to change the output location of the model
     type_spec = 'ln'
     world = map_reader(map_name_maker(density, clustering, map_num))
     output = [] #used to produce an output to visualized later
@@ -197,8 +197,8 @@ def main(density, clustering, map_num, gamma, beta):
     #df = DataFrame(data)
     
     agents = []
-    agents.append( Agent(gamma, beta, data, 1, 1) ) # gamma, beta, data, attraction_value, name
-    agents.append( Agent(gamma, beta, data, 1, 2) )
+    agents.append( Agent(gamma, beta, data, -1, 1) ) # gamma, beta, data, attraction_value, name
+    agents.append( Agent(gamma, beta, data, -1, 2) )
     for i in range(150):
         for agent in agents:
             #calculate, and then visit a location
@@ -218,22 +218,26 @@ def main(density, clustering, map_num, gamma, beta):
 
     if not os.path.exists(out_dir):
         os.mkdir(out_dir)
-    ind = get_score_indices(clust, world)
+    #ind = get_score_indices(clust, world)
     fname = os.path.join(out_dir, 'gamma{}-beta{}-clust{}-res{}-map{}'.format(gamma, beta, clustering, density, map_num))
     
-    np.savetxt(fname + '.txt', np.array(output))
+    out = np.array(output)
+    np.savetxt(fname + '.txt', out)
+    #import pdb; pdb.set_trace()
+    p1 = out[out[:,4] == 1]
+    p2 = out[out[:,4] == 2]
     
     fig = plt.figure(None, (12,6))
     ax = plt.subplot(1,2,1)
-    plt.plot(clust[:,0], clust[:,1], '-o')
+    plt.plot(p1[:,0], p1[:,1], '-o')
     plt.xlim(0,80)
     plt.ylim(0,64)
     ax = plt.subplot(1,2,2)
-    plt.plot(clust[ind,0], clust[ind,1], '-o' )
+    plt.plot(p2[:,0], p2[:,1], '-o')
     plt.xlim(0,80)
-    plt.ylim(0,64)
+    plt.ylim(0,64)    
     plt.suptitle('clust{}-res{}-lambda {}-{}'.format(clustering, density, gamma, type_spec))
-    plt.title('Score: {}'.format(clust[ind,2].sum()))
+    #plt.title('Score: {}'.format(clust[ind,2].sum()))
     plt.savefig(fname+'.png', dpi=200)
     plt.close("all")
     
