@@ -147,7 +147,17 @@ class Agent:
     def add_visited_location(self, loc, index, source_name):
         '''Adds a location to visited and removes it as a possible target.
             Used to keep track of locations visited by other agents'''
-        self.visited.append( (loc[0], loc[1], self.attraction_value, source_name) )
+        #self.visited.append( (loc[0], loc[1], self.attraction_value, source_name) )
+        x, y, val = self.xyvals[index, :]
+        assert x == loc[0] and y == loc[1], 'Location values do not match: x: {} {}, y: {} {}'.format(x, loc[0], y, loc[1])
+        points = 0 # always treat the location of the other agent as not having found a resource
+        
+        self.visited.append( (
+                                loc[0],
+                                loc[1],
+                                self.filter_vals(loc[0], loc[1], points, val) * self.attraction_value,
+                                source_name
+                                ) )
         self.remove_index(index)
         return
         
@@ -182,7 +192,7 @@ def main(density, clustering, map_num, gamma, beta, *args):
         Note: the out_dir variable hard codes the folder that the results will be output to
         args should be a value for each agent.
         '''
-    out_dir = 'multi_test' #modify this to change the output location of the model
+    out_dir = 'expected_test' #modify this to change the output location of the model
     type_spec = 'ln'
     world = map_reader(map_name_maker(density, clustering, map_num))
     output = [] #used to produce an output to visualized later

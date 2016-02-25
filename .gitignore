@@ -99,3 +99,6 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+
+multi_test/
+.ipynb_checkpoints/
